@@ -118,4 +118,4 @@ your_project/
   tf.config.set_visible_devices([], 'GPU')
   ```
 - 部署前建议用 `predict_test_model.py` 验证模型准确率。
-
+## 最后很感谢组员们找的数据集
