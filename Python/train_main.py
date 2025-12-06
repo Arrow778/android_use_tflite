@@ -11,8 +11,8 @@ from datetime import datetime
 CONFIG: dict = {
     "IMG_SIZE": (224, 224),  # 输入图像尺寸（宽, 高），MobileNetV2 默认使用 224x224
     "BATCH_SIZE": 16,  # 每个训练批次包含的样本数量；若 GPU 显存充足（>4GB），可适当增大（如 32）
-    "EPOCHS": 30,  # 训练总轮数（遍历整个训练集的次数）
-    "LEARNING_RATE": 0.000025,  # Adam 优化器的学习率；适合微调预训练模型
+    "EPOCHS": 37,  # 训练总轮数（遍历整个训练集的次数）
+    "LEARNING_RATE": 0.000060,  # Adam 优化器的学习率；适合微调预训练模型
     "SEED": 100,  # 随机种子，用于确保数据划分和数据增强的可复现性
     "VAL_RATE": 0.30,  # 验证集占总训练数据的比例（此处为 30%）
     "MODEL_DIR_ROOT": "models",  # 保存训练后 TFLite 模型的根目录
@@ -147,12 +147,12 @@ def build_inference_model(num_classes, img_size):
         include_top=False,
         weights="imagenet"
     )
-    base_model.trainable = False
-    fline_tune_at = len(base_model.layers) // 2
-    for layer in base_model.layers[:fline_tune_at]:
-        layer.trainable = False
-    for layer in base_model.layers[fline_tune_at:]:
-        layer.trainable = True
+    base_model.trainable = True
+    # fline_tune_at = len(base_model.layers) // 2
+    # for layer in base_model.layers[:fline_tune_at]:
+    #     layer.trainable = False
+    # for layer in base_model.layers[fline_tune_at:]:
+    #     layer.trainable = True
 
     model = models.Sequential([
         layers.Lambda(preprocess_input, input_shape=(*img_size, 3)),
@@ -165,7 +165,7 @@ def build_inference_model(num_classes, img_size):
     return model
 
 
-def plot_training_history(history, save_path="training_curves.png"):
+def plot_training_history(history, save_path="img\\training_curves.png"):
     """绘制并保存训练曲线"""
     plt.figure(figsize=(12, 4))
     plt.subplot(1, 2, 1)
@@ -191,7 +191,7 @@ def save_labels(class_names, label_dir):
     print(f"✅ label file saved as  {label_dir}")
 
 
-def visualize_validation_samples(val_dataset, class_names, save_path="validation_samples.png"):
+def visualize_validation_samples(val_dataset, class_names, save_path="img\\validation_samples.png"):
     """可视化验证集样本"""
     for images, labels in val_dataset.take(1):
         plt.figure(figsize=(12, 8))

@@ -82,7 +82,7 @@ def batch_rename(folder_path, new_prefix, overwrite=False):
 # ==========================================
 
 if __name__ == "__main__":
-    file_name = "apple"
+    file_name = "car"
     target_folder = f"datasets/train_1/{file_name}"  # 图片文件夹
     prefix_name = f"{file_name}_"  # 前缀
 

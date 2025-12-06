@@ -2,6 +2,7 @@ apple
 basketball
 book
 bottle
+car
 cat
 clothes
 computer

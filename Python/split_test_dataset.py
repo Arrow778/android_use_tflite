@@ -16,6 +16,9 @@ def create_test_set_from_train(train_root: str, test_root: str, sample_ratio: fl
     """
     random.seed(seed)
 
+    if path.exists(test_root):
+        shutil.rmtree(test_root)
+
     if not path.exists(train_root):
         raise ValueError(f"训练集路径不存在: {train_root}")
 

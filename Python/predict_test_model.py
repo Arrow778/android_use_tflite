@@ -10,10 +10,11 @@ import os.path as path
 # ======================
 # 配置路径（请根据实际情况修改）
 # ======================
-TFLITE_MODEL_PATH = "models/model-mutil-12-05-12-19-11.tflite"  # 替换为你的 .tflite 文件
-LABEL_FILE_PATH = "labels/label-mutil.txt"                      # 标签文件
-TEST_DATA_DIR = "datasets/test"                                 # 测试集根目录
-IMG_SIZE = (224, 224)                                           # 与训练时一致
+TFLITE_MODEL_PATH = "models/model-final-9689.tflite"  # 替换为你的 .tflite 文件
+LABEL_FILE_PATH = "labels/label-mutil.txt"  # 标签文件
+TEST_DATA_DIR = "datasets/test"  # 测试集根目录
+ERROR_OUTPUT_DIR = "predict_error_image"  # 错误日志输出目录
+IMG_SIZE = (224, 224)  # 与训练时一致
 
 
 def load_labels(label_file: str):
@@ -34,6 +35,10 @@ def load_test_dataset(test_dir: str, img_size: tuple, labels: list):
     true_labels = []
     filenames = []
 
+    if not path.exists(test_dir):
+        print(f"❌ 测试集路径不存在: {test_dir}")
+        return np.array([]), [], []
+
     for class_name in sorted(os.listdir(test_dir)):
         class_path = path.join(test_dir, class_name)
         if not path.isdir(class_path):
@@ -44,7 +49,7 @@ def load_test_dataset(test_dir: str, img_size: tuple, labels: list):
 
         true_idx = label_to_index[class_name]
         for img_name in os.listdir(class_path):
-            if not img_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+            if not img_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
                 continue
             img_path = path.join(class_path, img_name)
             try:
@@ -52,7 +57,8 @@ def load_test_dataset(test_dir: str, img_size: tuple, labels: list):
                 img_array = img_to_array(img)
                 images.append(img_array)
                 true_labels.append(true_idx)
-                filenames.append(f"{class_name}/{img_name}")
+                # 保存相对路径，方便查看
+                filenames.append(path.join(class_name, img_name))
             except Exception as e:
                 print(f"❌ 加载失败 {img_path}: {e}")
 
@@ -69,15 +75,12 @@ def evaluate_tflite_model(tflite_path: str, images: np.ndarray):
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
 
-    input_shape = input_details[0]['shape']
     batch_size = images.shape[0]
     predictions = []
 
+    # 这里逐张预测，虽然慢一点但稳妥；如果内存够大也可以考虑 batch 推理
     for i in range(batch_size):
-        # 预处理：添加 batch 维度
         input_data = np.expand_dims(images[i], axis=0)
-        # 如果模型需要归一化（如 MobileNetV2），确保输入是 float32 且范围正确
-        # 此处假设 TFLite 模型内部已包含 preprocess_input（Lambda 层）
         interpreter.set_tensor(input_details[0]['index'], input_data)
         interpreter.invoke()
         output = interpreter.get_tensor(output_details[0]['index'])
@@ -87,7 +90,7 @@ def evaluate_tflite_model(tflite_path: str, images: np.ndarray):
     return predictions
 
 
-def plot_confusion_matrix(true_labels, pred_labels, class_names, save_path="confusion_matrix.png"):
+def plot_confusion_matrix(true_labels, pred_labels, class_names, save_path="img\\confusion_matrix.png"):
     """绘制并保存混淆矩阵"""
     cm = confusion_matrix(true_labels, pred_labels)
     plt.figure(figsize=(10, 8))
@@ -101,10 +104,37 @@ def plot_confusion_matrix(true_labels, pred_labels, class_names, save_path="conf
     print(f"✅ 混淆矩阵已保存: {save_path}")
 
 
+def save_error_log(true_labels, pred_labels, filenames, class_names, output_dir):
+    """
+    将识别错误的样本信息保存到 txt 文件
+    """
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"📂 已创建目录: {output_dir}")
+
+    output_file = os.path.join(output_dir, "error_list.txt")
+
+    error_count = 0
+    with open(output_file, "w", encoding="utf-8") as f:
+        # 写入表头，使用对齐格式
+        header = f"{'Image Path':<50} | {'True Label':<15} | {'Predicted':<15}\n"
+        f.write(header)
+        f.write("-" * len(header) + "\n")
+
+        for idx, (t, p) in enumerate(zip(true_labels, pred_labels)):
+            if t != p:
+                error_count += 1
+                # 写入错误信息
+                line = f"{filenames[idx]:<50} | {class_names[t]:<15} | {class_names[p]:<15}\n"
+                f.write(line)
+
+    print(f"\n📝 错误日志已保存至: {output_file}")
+    print(f"❌ 共记录 {error_count} 个错误样本")
+
+
 def main():
     # 1. 加载标签
     class_names = load_labels(LABEL_FILE_PATH)
-    num_classes = len(class_names)
 
     # 2. 加载测试集
     images, true_labels, filenames = load_test_dataset(TEST_DATA_DIR, IMG_SIZE, class_names)
@@ -130,8 +160,11 @@ def main():
     # 6. 混淆矩阵
     plot_confusion_matrix(true_labels, pred_labels, class_names)
 
-    # 7. （可选）打印部分错误样本
-    print("\n🔍 部分错误预测示例:")
+    # 7. 保存错误日志到文件 (新增功能)
+    save_error_log(true_labels, pred_labels, filenames, class_names, ERROR_OUTPUT_DIR)
+
+    # 8. （可选）控制台打印少量示例
+    print("\n🔍 控制台预览部分错误:")
     errors = [(i, t, p) for i, (t, p) in enumerate(zip(true_labels, pred_labels)) if t != p]
     for i, (idx, t, p) in enumerate(errors[:5]):  # 打印前5个错误
         print(f"  {filenames[idx]} → 真实: {class_names[t]}, 预测: {class_names[p]}")
